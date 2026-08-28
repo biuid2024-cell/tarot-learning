@@ -165,10 +165,10 @@
       </div>
       ${flashState.revealed ? `
       <div class="hero-rating-row reveal-in">
-        <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1"><span class="rate-ico">✕</span>完全忘记</button>
-        <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2"><span class="rate-ico">～</span>有点印象</button>
-        <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3"><span class="rate-ico">✓</span>基本记得</button>
-        <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4"><span class="rate-ico">★</span>非常熟悉</button>
+        <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全忘记</button>
+        <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
+        <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">基本记得</button>
+        <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟悉</button>
       </div>` : ""}`;
     }
     return `

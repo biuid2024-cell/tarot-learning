@@ -202,16 +202,11 @@ button { cursor: pointer; }
 .grid-name { font-size: 10.5px; margin-top: 7px; color: var(--text-dim); line-height: 1.3; }
 
 .rating-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-.btn-rate { font-size: 12.5px; padding: 12px 4px; background: var(--bg-elevated-2); border: 1.5px solid var(--line); color: var(--text-dim); border-radius: var(--radius-sm); display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 600; }
-.btn-rate .rate-ico { font-size: 15px; line-height: 1; }
+.btn-rate { font-size: 13.5px; padding: 13px 4px; background: var(--bg-elevated-2); border: 1.5px solid var(--line); color: var(--text-dim); border-radius: var(--radius-sm); font-weight: 600; text-align: center; }
 .btn-rate.r1 { border-color: rgba(189,107,107,.55); color: #d99a9a; }
-.btn-rate.r1 .rate-ico { color: var(--danger); }
 .btn-rate.r2 { border-color: rgba(201,150,90,.5); color: #dcb686; }
-.btn-rate.r2 .rate-ico { color: #d1934f; }
 .btn-rate.r3 { border-color: rgba(201,168,105,.5); color: #ecd8a8; }
-.btn-rate.r3 .rate-ico { color: var(--accent); }
 .btn-rate.r4 { border-color: rgba(122,187,130,.55); color: #a9d9ae; }
-.btn-rate.r4 .rate-ico { color: #6fbd79; }
 
 .spread-list { display: flex; flex-direction: column; gap: 10px; }
 .spread-card { display: block; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,.05); border-radius: var(--radius-md); padding: 16px 18px; text-align: left; width: 100%; color: var(--text); box-shadow: var(--shadow-soft); }
