@@ -4,11 +4,24 @@
   const SCENARIO_LABELS = { love: "感情", career: "事业", health: "健康", relationship: "人际" };
   let practiceState = null; // 实战抽牌会话的临时状态（不持久化，刷新会重置）
   let flashState = null;    // 记忆闪卡会话的临时状态
+  // 语音输入：纯前端用浏览器自带的 SpeechRecognition，不需要后端/AI 接口。
+  // 注意：iOS Safari 目前不支持这个 Web API（苹果自己没实现），所以在不支持的浏览器里不会显示一个点了没反应的按钮，
+  // 而是提示去用手机键盘自带的麦克风功能（iOS 键盘本身就支持听写，不需要我们额外做什么）。
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let activeRecognition = null;
 
   // ---------- 工具函数 ----------
   function getCardById(id) { return window.TAROT_ALL_CARDS.find(c => c.id === id); }
   function esc(str) { const d = document.createElement("div"); d.textContent = str == null ? "" : String(str); return d.innerHTML; }
   function nl2br(str) { return esc(str).replace(/\n/g, "<br/>"); }
+  // 文本框旁边的辅助行：支持语音识别的浏览器给个语音输入按钮，不支持的（主要是 iOS Safari）直接给个实用提示，
+  // 不放任何装饰性 icon，只用文字。
+  function voiceInputRowHTML(targetId) {
+    if (SpeechRecognitionCtor) {
+      return `<button class="link-btn" data-action="voice-input" data-target="${targetId}">语音输入</button>`;
+    }
+    return `<p class="voice-hint">提示：点一下输入框，用手机键盘自带的麦克风按钮就能语音输入。</p>`;
+  }
 
   function getScenarioText(card, scenarioKey, orientation) {
     if (card.arcana === "major") {
@@ -332,6 +345,7 @@
     if (!spread) return `<p>牌阵不存在</p>`;
     const activePos = window._activePosition || spread.positions[0].id;
     const pos = spread.positions.find(p => p.id === activePos);
+    const lm = spread.learnMore;
     return `
     ${headerHTML(spread.name, { back: "spreads" })}
     <p class="muted">${esc(spread.desc || "")}</p>
@@ -340,7 +354,20 @@
       <h4>位置 ${pos.id}：${esc(pos.label)}</h4>
       <p>${esc(pos.desc)}</p>
     </div>
-    <a class="btn btn-primary full-width" href="#/practice">用这个牌阵去实战 →</a>
+    ${lm ? `
+    <div class="scenario-block">
+      <h4>什么时候用</h4>
+      <p class="scenario-text">${esc(lm.when)}</p>
+    </div>
+    <div class="scenario-block">
+      <h4>怎么联系着看</h4>
+      <p class="scenario-text">${esc(lm.howToRead)}</p>
+    </div>
+    <div class="scenario-block">
+      <h4>常见误区</h4>
+      <p class="scenario-text">${esc(lm.pitfalls)}</p>
+    </div>` : ""}
+    <button class="btn btn-primary full-width" data-action="start-practice" data-spread="${spread.id}">用这个牌阵去实战，直接开始抽牌 →</button>
     ${spread.custom ? `<button class="link-btn" data-action="delete-spread" data-id="${spread.id}">删除这个自定义牌阵</button>` : ""}`;
   }
   function viewSpreadCreator() {
@@ -468,6 +495,7 @@
         <label>写下你的解读</label>
         <p class="input-hint">先别看参考答案，自己想一遍——这段文字会保存进「塔罗日记」，等实际情况发生后回来对照，才知道这次解读准不准，这是练解读最有效的方式。</p>
         <textarea id="my-interp" rows="3" placeholder="结合这个位置的含义，说说你的理解...">${esc(practiceState.myInterp[pos.id] || "")}</textarea>
+        ${voiceInputRowHTML("my-interp")}
       </div>
       ${revealed ? `
       <div class="card-panel scenario-text">
@@ -494,6 +522,7 @@
       <label>你的综合解读</label>
       <p class="input-hint">写完点「保存」会存进塔罗日记，随时能翻出来看；过一阵子回来对照实际发生的事，就是检验自己解读准不准的机会。</p>
       <textarea id="practice-summary" rows="5" placeholder="整合几张牌，写一段总结...">${esc(practiceState.summary)}</textarea>
+      ${voiceInputRowHTML("practice-summary")}
       <div class="form-actions">
         <button class="btn btn-primary" data-action="save-journal">保存到塔罗日记</button>
         <button class="btn btn-outline" data-action="restart-practice">重新抽一次</button>
@@ -644,6 +673,28 @@
         if (ta) practiceState.myInterp[el.dataset.pos] = ta.value;
         practiceState.revealedRef[el.dataset.pos] = true;
         rerender();
+      },
+      "voice-input": () => {
+        if (!SpeechRecognitionCtor) return;
+        const targetId = el.dataset.target;
+        const ta = document.getElementById(targetId);
+        if (!ta) return;
+        if (activeRecognition) { try { activeRecognition.stop(); } catch (e) { } }
+        const recognition = new SpeechRecognitionCtor();
+        activeRecognition = recognition;
+        recognition.lang = "zh-CN";
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        const originalLabel = el.textContent;
+        el.textContent = "聆听中…";
+        const reset = () => { el.textContent = originalLabel; if (activeRecognition === recognition) activeRecognition = null; };
+        recognition.onresult = (e) => {
+          const text = e.results[0][0].transcript;
+          ta.value = (ta.value.trim() ? ta.value.trim() + "\n" : "") + text;
+        };
+        recognition.onend = reset;
+        recognition.onerror = reset;
+        try { recognition.start(); } catch (err) { reset(); }
       },
       "next-interp": () => {
         const ta = document.getElementById("my-interp");
