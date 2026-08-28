@@ -42,7 +42,9 @@
   // xs 尺寸（牌库网格、实战抽牌小槽位）用专门生成的小图，体积只有原图的 1/6 左右，大幅提速
   function cardImagePath(card, size) {
     const id = card.id.toLowerCase();
-    return size === "xs" ? `assets/cards/thumb/${id}.jpg` : `assets/cards/${id}.jpg`;
+    if (size === "xs") return `assets/cards/thumb/${id}.jpg`;
+    if (size === "sm" || size === "md") return `assets/cards/mid/${id}.jpg`;
+    return `assets/cards/${id}.jpg`;
   }
   function moonGlyphSVG() {
     return `<svg viewBox="0 0 100 100"><path d="M64 18 A34 34 0 1 0 64 84 A25 25 0 1 1 64 18 Z" fill="currentColor"/></svg>`;
@@ -119,16 +121,15 @@
     </header>`;
   }
 
-  // ---------- 记忆模块：顶部一个「学习 / 牌库」切换，两个子页面平级，牌库不再是藏起来的小字入口 ----------
-  // 用同一个「顶部行」组件（只放设置齿轮，不放标题），确保「学习」「牌库」两个页面里
-  // 这一排切换按钮出现在完全相同的高度，不会因为牌库多了个页面标题而往下多顶一截。
-  function learnTopRowHTML() {
-    return `<div class="learn-toprow"><a href="#/settings" class="learn-settings" onclick="event.stopPropagation()">${gearSVG()}</a></div>`;
-  }
-  function learnSectionSwitchHTML(active) {
-    return `<div class="seg-ctrl">
-      <a href="#/learn" class="seg-btn ${active === 'study' ? 'active' : ''}">学习</a>
-      <a href="#/learn/grid" class="seg-btn ${active === 'grid' ? 'active' : ''}">牌库</a>
+  // ---------- 记忆模块：顶部一行同时放「学习/牌库」切换 + 设置齿轮，两个子页面用完全相同的一个函数生成这一行，
+  // 保证切换时位置一毫不差、不会换来换去。 ----------
+  function learnTopRowHTML(active) {
+    return `<div class="learn-toprow">
+      <div class="seg-ctrl">
+        <a href="#/learn" class="seg-btn ${active === 'study' ? 'active' : ''}">学习</a>
+        <a href="#/learn/grid" class="seg-btn ${active === 'grid' ? 'active' : ''}">牌库</a>
+      </div>
+      <a href="#/settings" class="learn-settings" onclick="event.stopPropagation()">${gearSVG()}</a>
     </div>`;
   }
   function defaultLearnMode() {
@@ -150,7 +151,8 @@
       body = `<div class="hero-hint">本轮已完成</div><div class="hero-recap"><div class="recap-meaning">共练习了 ${flashState.total} 张，换个模式或去「牌库」翻翻别的牌吧</div></div>`;
     } else {
       // 记忆学习的正确逻辑：先给你看真实牌面图，让你自己先想一遍含义；
-      // 点一下之后才「翻面」展示文字解读——不是反过来先给你看牌背。
+      // 点一下之后才展开文字解读——不是真的把牌翻过去（那样会和逆位的旋转冲突），
+      // 而是用一个轻盈的「点击反馈 + 内容淡入」来表达「已经确实看到你的反应」。
       const item = flashState.queue[flashState.index];
       const card = item.card;
       body = `<div class="hero-card-wrap" data-action="flip-flash">${cardFaceHTML(card, item.orientation, "hero")}</div>
@@ -158,29 +160,30 @@
         <div class="recap-name">${esc(card.name)}</div>
         <div class="recap-orient">${item.orientation === 'upright' ? '正位' : '逆位'}</div>
         ${!flashState.revealed
-          ? `<div class="recap-cta">轻触卡片，自己先想一遍含义，再翻面看解读 →</div>`
-          : `<div class="recap-meaning">${esc(cardMeaningText(card, item.orientation))}</div>`}
+          ? `<div class="recap-cta">轻触卡片，自己先想一遍含义，再看解读 →</div>`
+          : `<div class="recap-meaning reveal-in">${esc(cardMeaningText(card, item.orientation))}</div>`}
       </div>
       ${flashState.revealed ? `
-      <div class="hero-rating-row">
-        <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全不会</button>
-        <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
-        <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">记得</button>
-        <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟</button>
+      <div class="hero-rating-row reveal-in">
+        <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1"><span class="rate-ico">✕</span>完全忘记</button>
+        <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2"><span class="rate-ico">～</span>有点印象</button>
+        <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3"><span class="rate-ico">✓</span>基本记得</button>
+        <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4"><span class="rate-ico">★</span>非常熟悉</button>
       </div>` : ""}`;
     }
     return `
     <div class="hero-daily">
       <div class="hero-vignette top"></div>
       <div class="hero-vignette bottom"></div>
-      ${learnTopRowHTML()}
-      ${learnSectionSwitchHTML("study")}
-      <div class="hero-progress">
-        <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
-        <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday}</p>
+      ${learnTopRowHTML("study")}
+      <div class="hero-center-stack">
+        <div class="hero-progress">
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
+          <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday}</p>
+        </div>
+        <div class="hero-mode-row">${modes.map(([k, l]) => `<button class="chip ${mode === k ? 'active' : ''}" data-action="learn-mode" data-value="${k}">${l}</button>`).join("")}</div>
+        ${body}
       </div>
-      <div class="hero-mode-row">${modes.map(([k, l]) => `<button class="chip ${mode === k ? 'active' : ''}" data-action="learn-mode" data-value="${k}">${l}</button>`).join("")}</div>
-      ${body}
     </div>`;
   }
 
@@ -192,8 +195,7 @@
     if (filter === "major") cards = cards.filter(c => c.arcana === "major");
     else if (filter !== "all") cards = cards.filter(c => c.suit === filter);
     return `
-    ${learnTopRowHTML()}
-    ${learnSectionSwitchHTML("grid")}
+    ${learnTopRowHTML("grid")}
     <div class="filter-row">${filters.map(([k, label]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-action="learn-filter" data-value="${k}">${label}</button>`
     ).join("")}</div>
@@ -593,12 +595,13 @@
       "delete-note": () => { window.TarotStorage.deleteNote(el.dataset.id); rerender(); },
       "flip-flash": () => {
         if (flashState.revealed) return;
-        // 先播放一个短暂的“翻牌”动效再展示解读文字，给一点真实的翻牌互动感，
-        // 不是点一下就干巴巴地蹦出文字。
-        const inner = el.querySelector(".tcard-inner");
-        if (inner) {
-          inner.classList.add("flip-anim");
-          setTimeout(() => { flashState.revealed = true; rerender(); }, 380);
+        // 卡面本身不需要“翻过去”（图案前后都一样，硬做一个假翻转反而会和逆位的
+        // 180°旋转打架、出bug）。改成一个诚实的点击反馈：卡片轻轻按压+泛一下金光，
+        // 紧接着解读文字淡入展开——既有触感反馈，又不会撒谎说“翻面了”。
+        const tcard = el.querySelector(".tcard");
+        if (tcard) {
+          tcard.classList.add("tap-pulse");
+          setTimeout(() => { flashState.revealed = true; rerender(); }, 260);
         } else {
           flashState.revealed = true; rerender();
         }
