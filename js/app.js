@@ -39,7 +39,11 @@
   }
 
   // ---------- 卡牌视觉组件（真实韦特-史密斯塔罗牌图，assets/cards/*.jpg） ----------
-  function cardImagePath(card) { return `assets/cards/${card.id.toLowerCase()}.jpg`; }
+  // xs 尺寸（牌库网格、实战抽牌小槽位）用专门生成的小图，体积只有原图的 1/6 左右，大幅提速
+  function cardImagePath(card, size) {
+    const id = card.id.toLowerCase();
+    return size === "xs" ? `assets/cards/thumb/${id}.jpg` : `assets/cards/${id}.jpg`;
+  }
   function moonGlyphSVG() {
     return `<svg viewBox="0 0 100 100"><path d="M64 18 A34 34 0 1 0 64 84 A25 25 0 1 1 64 18 Z" fill="currentColor"/></svg>`;
   }
@@ -50,7 +54,7 @@
     const rot = orientation === "reversed" ? "transform:rotate(180deg);" : "";
     return `<div class="tcard tcard-${size || 'md'}">
       <div class="tcard-inner" style="${rot}">
-        <img class="tcard-img" src="${cardImagePath(card)}" alt="${esc(card.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <img class="tcard-img" src="${cardImagePath(card, size)}" alt="${esc(card.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
         <div class="tcard-fallback"><span>${esc(card.name)}</span></div>
       </div>
     </div>`;
@@ -67,7 +71,10 @@
   window.addEventListener("hashchange", render);
   document.addEventListener("DOMContentLoaded", render);
 
-  function render() {
+  // renderInto(keepScroll)：keepScroll=false 用于真正切换路由（滚动回到顶部）；
+  // keepScroll=true 用于同一页面内的小交互（切 tab、翻牌、展开内容等），保留当前滚动位置，
+  // 避免出现「点一下 tab 页面就跳回最顶上」的问题。
+  function renderInto(keepScroll) {
     const p = parts();
     const root = p[0] || "learn";
     let html = "", isHero = false;
@@ -83,10 +90,14 @@
     else { html = viewLearnHome(); isHero = true; }
 
     const pageClass = isHero ? "page flush" : "page";
+    const oldScroller = $app.querySelector(".page-scroll");
+    const prevTop = oldScroller ? oldScroller.scrollTop : 0;
     $app.innerHTML = `<div class="page-scroll"><div class="${pageClass}">${html}</div></div>` + navBarHTML(root);
     const scroller = $app.querySelector(".page-scroll");
-    if (scroller) scroller.scrollTop = 0;
+    if (scroller) scroller.scrollTop = keepScroll ? prevTop : 0;
   }
+  function render() { renderInto(false); }
+  function rerender() { renderInto(true); }
 
   function navBarHTML(active) {
     const items = [
@@ -108,7 +119,13 @@
     </header>`;
   }
 
-  // ---------- 记忆模块入口：没有独立首页，一进来就是学新牌/复习的大卡片交互 ----------
+  // ---------- 记忆模块：顶部一个「学习 / 牌库」切换，两个子页面平级，牌库不再是藏起来的小字入口 ----------
+  function learnSectionSwitchHTML(active) {
+    return `<div class="seg-ctrl">
+      <a href="#/learn" class="seg-btn ${active === 'study' ? 'active' : ''}">学习</a>
+      <a href="#/learn/grid" class="seg-btn ${active === 'grid' ? 'active' : ''}">牌库</a>
+    </div>`;
+  }
   function defaultLearnMode() {
     return window.TarotSRS.getStats(window.TAROT_ALL_CARDS).dueToday > 0 ? "due" : "new";
   }
@@ -125,40 +142,44 @@
     if (flashState.queue.length === 0) {
       body = `<div class="hero-hint">这个模式暂时没有待处理的卡片</div>`;
     } else if (flashState.index >= flashState.queue.length) {
-      body = `<div class="hero-hint">本轮已完成</div><div class="hero-recap"><div class="recap-meaning">共练习了 ${flashState.total} 张，换个模式或去浏览全部牌面吧</div></div>`;
+      body = `<div class="hero-hint">本轮已完成</div><div class="hero-recap"><div class="recap-meaning">共练习了 ${flashState.total} 张，换个模式或去「牌库」翻翻别的牌吧</div></div>`;
     } else {
+      // 记忆学习的正确逻辑：先给你看真实牌面图，让你自己先想一遍含义；
+      // 点一下之后才「翻面」展示文字解读——不是反过来先给你看牌背。
       const item = flashState.queue[flashState.index];
       const card = item.card;
-      body = `<div class="hero-card-wrap" data-action="flip-flash">${flashState.revealed ? cardFaceHTML(card, item.orientation, "hero") : cardBackHTML("hero")}</div>
-      ${!flashState.revealed ? `<div class="hero-hint">轻触查看</div>` : `
+      body = `<div class="hero-card-wrap" data-action="flip-flash">${cardFaceHTML(card, item.orientation, "hero")}</div>
       <div class="hero-recap">
         <div class="recap-name">${esc(card.name)}</div>
         <div class="recap-orient">${item.orientation === 'upright' ? '正位' : '逆位'}</div>
-        <div class="recap-meaning">${esc(cardMeaningText(card, item.orientation))}</div>
+        ${!flashState.revealed
+          ? `<div class="recap-cta">轻触卡片，自己先想一遍含义，再翻面看解读 →</div>`
+          : `<div class="recap-meaning">${esc(cardMeaningText(card, item.orientation))}</div>`}
       </div>
+      ${flashState.revealed ? `
       <div class="hero-rating-row">
         <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全不会</button>
         <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
         <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">记得</button>
         <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟</button>
-      </div>`}`;
+      </div>` : ""}`;
     }
     return `
     <div class="hero-daily">
       <a href="#/settings" class="hero-settings" onclick="event.stopPropagation()">${gearSVG()}</a>
       <div class="hero-vignette top"></div>
       <div class="hero-vignette bottom"></div>
+      ${learnSectionSwitchHTML("study")}
       <div class="hero-progress">
         <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
         <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday}</p>
       </div>
       <div class="hero-mode-row">${modes.map(([k, l]) => `<button class="chip ${mode === k ? 'active' : ''}" data-action="learn-mode" data-value="${k}">${l}</button>`).join("")}</div>
       ${body}
-      <a href="#/learn/grid" class="hero-footer-link">浏览全部牌面 →</a>
     </div>`;
   }
 
-  // ---------- 记忆学习：全部牌面浏览 ----------
+  // ---------- 记忆学习：全部牌面浏览（和「学习」是平级的两个子页面，不是藏起来的入口）----------
   function viewLearnGrid() {
     const filter = window._learnFilter || "all";
     const filters = [["all", "全部"], ["major", "大阿尔卡那"], ["wands", "权杖"], ["cups", "圣杯"], ["swords", "宝剑"], ["pentacles", "星币"]];
@@ -166,7 +187,8 @@
     if (filter === "major") cards = cards.filter(c => c.arcana === "major");
     else if (filter !== "all") cards = cards.filter(c => c.suit === filter);
     return `
-    ${headerHTML("全部牌面", { back: "learn" })}
+    ${headerHTML("塔罗牌库")}
+    ${learnSectionSwitchHTML("grid")}
     <div class="filter-row">${filters.map(([k, label]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-action="learn-filter" data-value="${k}">${label}</button>`
     ).join("")}</div>
@@ -399,16 +421,18 @@
       <div class="center-text">${cardFaceHTML(card, d.orientation, "md")}</div>
       <h3 class="center-text">${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</h3>
       <div class="card-panel">
-        <label>你的解读（先自己想想看）</label>
+        <label>写下你的解读</label>
+        <p class="input-hint">先别看参考答案，自己想一遍——这段文字会保存进「塔罗日记」，等实际情况发生后回来对照，才知道这次解读准不准，这是练解读最有效的方式。</p>
         <textarea id="my-interp" rows="3" placeholder="结合这个位置的含义，说说你的理解...">${esc(practiceState.myInterp[pos.id] || "")}</textarea>
       </div>
       ${revealed ? `
       <div class="card-panel scenario-text">
+        ${practiceState.myInterp[pos.id] ? `<div class="my-interp-recap"><span class="mynote-tag">你刚才写的</span><p>${nl2br(practiceState.myInterp[pos.id])}</p></div>` : ""}
         <h4>参考解读</h4>
         <p>${esc(cardMeaningText(card, d.orientation))}</p>
         <p><b>${SCENARIO_LABELS[practiceState.scenario] || ''}场景：</b>${esc(practiceState.scenario !== 'other' ? getScenarioText(card, practiceState.scenario, d.orientation) : '')}</p>
         ${myNoteListHTML(myNotesFor(card.id, d.orientation, null))}
-      </div>` : `<button class="btn btn-outline full-width" data-action="reveal-ref" data-pos="${pos.id}">展开参考解读 ▾</button>`}
+      </div>` : `<button class="btn btn-outline full-width" data-action="reveal-ref" data-pos="${pos.id}">展开参考解读，对比一下 ▾</button>`}
       <button class="btn btn-primary full-width" data-action="next-interp" data-pos="${pos.id}">${interpIdx === total - 1 ? '完成，看综合总结 →' : '下一张 →'}</button>`;
     }
     // 综合总结
@@ -424,6 +448,7 @@
     </div>
     <div class="card-panel">
       <label>你的综合解读</label>
+      <p class="input-hint">写完点「保存」会存进塔罗日记，随时能翻出来看；过一阵子回来对照实际发生的事，就是检验自己解读准不准的机会。</p>
       <textarea id="practice-summary" rows="5" placeholder="整合几张牌，写一段总结...">${esc(practiceState.summary)}</textarea>
       <div class="form-actions">
         <button class="btn btn-primary" data-action="save-journal">保存到塔罗日记</button>
@@ -503,8 +528,8 @@
     const action = el.dataset.action;
     const handlers = {
       "learn-mode": () => { window._learnMode = el.dataset.value; flashState = null; render(); },
-      "learn-filter": () => { window._learnFilter = el.dataset.value; render(); },
-      "detail-scenario": () => { window._detailScenario = el.dataset.value; render(); },
+      "learn-filter": () => { window._learnFilter = el.dataset.value; rerender(); },
+      "detail-scenario": () => { window._detailScenario = el.dataset.value; rerender(); },
       "open-add-note": () => {
         document.getElementById("note-form-slot").innerHTML = addNoteFormHTML(el.dataset.card, el.dataset.scenario);
       },
@@ -516,15 +541,15 @@
         const text = document.getElementById("note-text").value.trim();
         if (!text) return alert("请先填写内容");
         window.TarotStorage.addNote({ cardId, orientation, scenario, text });
-        render();
+        rerender();
       },
       "toggle-distinguish": () => {
         const cur = window.TarotStorage.getSettings();
         window.TarotStorage.setSettings({ distinguishReversed: !cur.distinguishReversed });
-        render();
+        rerender();
       },
-      "delete-note": () => { window.TarotStorage.deleteNote(el.dataset.id); render(); },
-      "flip-flash": () => { flashState.revealed = true; render(); },
+      "delete-note": () => { window.TarotStorage.deleteNote(el.dataset.id); rerender(); },
+      "flip-flash": () => { flashState.revealed = true; rerender(); },
       "rate-flash": () => {
         const item = flashState.queue[flashState.index];
         window.TarotSRS.review(item.key, parseInt(el.dataset.rating, 10));
@@ -532,10 +557,10 @@
         flashState.revealed = false;
         render();
       },
-      "show-position": () => { window._activePosition = parseInt(el.dataset.idx, 10); render(); },
+      "show-position": () => { window._activePosition = parseInt(el.dataset.idx, 10); rerender(); },
       "delete-spread": () => { if (confirm("确定删除这个自定义牌阵？")) { window.TarotStorage.deleteCustomSpread(el.dataset.id); nav("spreads"); } },
-      "add-position": () => { syncSpreadDraftFromForm(); window._spreadDraft.positions.push({ label: "", desc: "" }); render(); },
-      "remove-position": () => { syncSpreadDraftFromForm(); if (window._spreadDraft.positions.length > 1) window._spreadDraft.positions.pop(); render(); },
+      "add-position": () => { syncSpreadDraftFromForm(); window._spreadDraft.positions.push({ label: "", desc: "" }); rerender(); },
+      "remove-position": () => { syncSpreadDraftFromForm(); if (window._spreadDraft.positions.length > 1) window._spreadDraft.positions.pop(); rerender(); },
       "save-spread": () => {
         const name = document.getElementById("spread-name").value.trim();
         const labels = Array.from(document.querySelectorAll(".pos-label")).map(i => i.value.trim());
@@ -555,13 +580,13 @@
         const { card, orientation } = drawRandomCard(excluded);
         practiceState.drawn.push({ positionId: pos.id, cardId: card.id, orientation });
         practiceState.step++;
-        render();
+        rerender();
       },
       "reveal-ref": () => {
         const ta = document.getElementById("my-interp");
         if (ta) practiceState.myInterp[el.dataset.pos] = ta.value;
         practiceState.revealedRef[el.dataset.pos] = true;
-        render();
+        rerender();
       },
       "next-interp": () => {
         const ta = document.getElementById("my-interp");
