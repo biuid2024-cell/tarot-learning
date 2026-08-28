@@ -4,24 +4,11 @@
   const SCENARIO_LABELS = { love: "感情", career: "事业", health: "健康", relationship: "人际" };
   let practiceState = null; // 实战抽牌会话的临时状态（不持久化，刷新会重置）
   let flashState = null;    // 记忆闪卡会话的临时状态
-  // 语音输入：纯前端用浏览器自带的 SpeechRecognition，不需要后端/AI 接口。
-  // 注意：iOS Safari 目前不支持这个 Web API（苹果自己没实现），所以在不支持的浏览器里不会显示一个点了没反应的按钮，
-  // 而是提示去用手机键盘自带的麦克风功能（iOS 键盘本身就支持听写，不需要我们额外做什么）。
-  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let activeRecognition = null;
 
   // ---------- 工具函数 ----------
   function getCardById(id) { return window.TAROT_ALL_CARDS.find(c => c.id === id); }
   function esc(str) { const d = document.createElement("div"); d.textContent = str == null ? "" : String(str); return d.innerHTML; }
   function nl2br(str) { return esc(str).replace(/\n/g, "<br/>"); }
-  // 文本框旁边的辅助行：支持语音识别的浏览器给个语音输入按钮，不支持的（主要是 iOS Safari）直接给个实用提示，
-  // 不放任何装饰性 icon，只用文字。
-  function voiceInputRowHTML(targetId) {
-    if (SpeechRecognitionCtor) {
-      return `<button class="link-btn" data-action="voice-input" data-target="${targetId}">语音输入</button>`;
-    }
-    return `<p class="voice-hint">提示：点一下输入框，用手机键盘自带的麦克风按钮就能语音输入。</p>`;
-  }
 
   function getScenarioText(card, scenarioKey, orientation) {
     if (card.arcana === "major") {
@@ -451,10 +438,11 @@
       spread,
       drawn: [],           // {positionId, cardId, orientation}
       step: 0,             // 当前抽到第几张（drawn.length）
-      revealedRef: {},      // positionId -> bool 是否已展开参考解读
-      myInterp: {},         // positionId -> 用户填写的解读
       summary: ""
     };
+    // 修复：之前这里没有重置 _practiceInterpIdx，导致上一次没走完的解读进度会带进新的一局，
+    // 出现“有的牌阵直接跳过逐张解读”或者“解读顺序错乱”的bug。
+    window._practiceInterpIdx = 0;
     nav("practice/session");
   }
 
@@ -479,33 +467,25 @@
         <button class="btn btn-primary" data-action="draw-card">抽牌</button>
       </div>`;
     }
-    // 逐张解读阶段
+    // 逐张解读阶段：抽完之后，严格按照牌阵的位置顺序（1,2,3...）逐张展示，
+    // 用 positionId 去匹配对应抽到的牌，不依赖数组下标，避免顺序错乱。
     const interpIdx = window._practiceInterpIdx || 0;
     if (interpIdx < total) {
       const pos = spread.positions[interpIdx];
-      const d = drawn[interpIdx];
+      const d = drawn.find(x => x.positionId === pos.id);
       const card = getCardById(d.cardId);
-      const revealed = !!practiceState.revealedRef[pos.id];
       return `
       ${headerHTML(spread.name, { back: "practice" })}
       <p class="muted">${pos.id}/${total}：${esc(pos.label)} —— ${esc(pos.desc)}</p>
       <div class="center-text">${cardFaceHTML(card, d.orientation, "md")}</div>
       <h3 class="center-text">${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</h3>
-      <div class="card-panel">
-        <label>写下你的解读</label>
-        <p class="input-hint">先别看参考答案，自己想一遍——这段文字会保存进「塔罗日记」，等实际情况发生后回来对照，才知道这次解读准不准，这是练解读最有效的方式。</p>
-        <textarea id="my-interp" rows="3" placeholder="结合这个位置的含义，说说你的理解...">${esc(practiceState.myInterp[pos.id] || "")}</textarea>
-        ${voiceInputRowHTML("my-interp")}
-      </div>
-      ${revealed ? `
       <div class="card-panel scenario-text">
-        ${practiceState.myInterp[pos.id] ? `<div class="my-interp-recap"><span class="mynote-tag">你刚才写的</span><p>${nl2br(practiceState.myInterp[pos.id])}</p></div>` : ""}
-        <h4>参考解读</h4>
+        <h4>解读</h4>
         <p>${esc(cardMeaningText(card, d.orientation))}</p>
         <p><b>${SCENARIO_LABELS[practiceState.scenario] || ''}场景：</b>${esc(practiceState.scenario !== 'other' ? getScenarioText(card, practiceState.scenario, d.orientation) : '')}</p>
         ${myNoteListHTML(myNotesFor(card.id, d.orientation, null))}
-      </div>` : `<button class="btn btn-outline full-width" data-action="reveal-ref" data-pos="${pos.id}">展开参考解读，对比一下 ▾</button>`}
-      <button class="btn btn-primary full-width" data-action="next-interp" data-pos="${pos.id}">${interpIdx === total - 1 ? '完成，看综合总结 →' : '下一张 →'}</button>`;
+      </div>
+      <button class="btn btn-primary full-width" data-action="next-interp">${interpIdx === total - 1 ? '完成，看综合总结 →' : '下一张 →'}</button>`;
     }
     // 综合总结
     return `
@@ -519,10 +499,9 @@
       }).join("")}
     </div>
     <div class="card-panel">
-      <label>你的综合解读</label>
-      <p class="input-hint">写完点「保存」会存进塔罗日记，随时能翻出来看；过一阵子回来对照实际发生的事，就是检验自己解读准不准的机会。</p>
+      <label>你的综合解读（可选）</label>
+      <p class="input-hint">写完点「保存」会存进塔罗日记，随时能翻出来看；不想写也可以直接保存，牌面和解读内容都会留存。</p>
       <textarea id="practice-summary" rows="5" placeholder="整合几张牌，写一段总结...">${esc(practiceState.summary)}</textarea>
-      ${voiceInputRowHTML("practice-summary")}
       <div class="form-actions">
         <button class="btn btn-primary" data-action="save-journal">保存到塔罗日记</button>
         <button class="btn btn-outline" data-action="restart-practice">重新抽一次</button>
@@ -555,8 +534,7 @@
       const card = getCardById(d.cardId);
       return `<div class="card-panel">
         <div class="flex-row">${cardFaceHTML(card, d.orientation, "sm")}
-          <div class="flex-text"><b>${esc(d.positionLabel)}：${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</b>
-          <p>${esc(d.myInterp || "（未填写）")}</p></div>
+          <div class="flex-text"><b>${esc(d.positionLabel)}：${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</b></div>
         </div>
       </div>`;
     }).join("")}
@@ -668,46 +646,16 @@
         practiceState.step++;
         rerender();
       },
-      "reveal-ref": () => {
-        const ta = document.getElementById("my-interp");
-        if (ta) practiceState.myInterp[el.dataset.pos] = ta.value;
-        practiceState.revealedRef[el.dataset.pos] = true;
-        rerender();
-      },
-      "voice-input": () => {
-        if (!SpeechRecognitionCtor) return;
-        const targetId = el.dataset.target;
-        const ta = document.getElementById(targetId);
-        if (!ta) return;
-        if (activeRecognition) { try { activeRecognition.stop(); } catch (e) { } }
-        const recognition = new SpeechRecognitionCtor();
-        activeRecognition = recognition;
-        recognition.lang = "zh-CN";
-        recognition.interimResults = false;
-        recognition.continuous = false;
-        const originalLabel = el.textContent;
-        el.textContent = "聆听中…";
-        const reset = () => { el.textContent = originalLabel; if (activeRecognition === recognition) activeRecognition = null; };
-        recognition.onresult = (e) => {
-          const text = e.results[0][0].transcript;
-          ta.value = (ta.value.trim() ? ta.value.trim() + "\n" : "") + text;
-        };
-        recognition.onend = reset;
-        recognition.onerror = reset;
-        try { recognition.start(); } catch (err) { reset(); }
-      },
       "next-interp": () => {
-        const ta = document.getElementById("my-interp");
-        if (ta) practiceState.myInterp[el.dataset.pos] = ta.value;
         window._practiceInterpIdx = (window._practiceInterpIdx || 0) + 1;
         render();
       },
       "save-journal": () => {
         const summary = document.getElementById("practice-summary").value.trim();
-        const { spread, drawn, question, scenario, myInterp } = practiceState;
+        const { spread, drawn, question, scenario } = practiceState;
         window.TarotStorage.addJournalEntry({
           question, scenario, spreadName: spread.name,
-          drawn: drawn.map(d => ({ ...d, positionLabel: spread.positions.find(p => p.id === d.positionId).label, myInterp: myInterp[d.positionId] })),
+          drawn: drawn.map(d => ({ ...d, positionLabel: spread.positions.find(p => p.id === d.positionId).label })),
           summary
         });
         practiceState = null; window._practiceInterpIdx = 0;
