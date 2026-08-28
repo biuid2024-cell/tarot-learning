@@ -526,19 +526,37 @@
   function viewJournalDetail(id) {
     const j = window.TarotStorage.getJournal().find(x => x.id === id);
     if (!j) return `<p>记录不存在</p>`;
+    const editing = window._journalEditingId === id;
     return `
     ${headerHTML("日记详情", { back: "journal" })}
     <p class="muted">${new Date(j.createdAt).toLocaleString()} · ${esc(j.spreadName)}</p>
-    <div class="card-panel"><b>问题：</b>${esc(j.question || "（未填写）")}</div>
+    ${editing ? `
+    <div class="card-panel">
+      <label>问题</label>
+      <input id="journal-edit-question" value="${esc(j.question || "")}" placeholder="这次想问的问题（可选）" />
+      <label>综合解读</label>
+      <textarea id="journal-edit-summary" rows="4" placeholder="整合几张牌，写一段总结...">${esc(j.summary || "")}</textarea>
+      <div class="form-actions">
+        <button class="btn btn-primary" data-action="save-journal-edit" data-id="${j.id}">保存修改</button>
+        <button class="btn btn-outline" data-action="cancel-journal-edit">取消</button>
+      </div>
+    </div>` : `
+    <div class="card-panel"><b>问题：</b>${esc(j.question || "（未填写）")}
+      <button class="link-btn" data-action="edit-journal" data-id="${j.id}">编辑问题/总结</button>
+    </div>`}
     ${j.drawn.map(d => {
       const card = getCardById(d.cardId);
       return `<div class="card-panel">
         <div class="flex-row">${cardFaceHTML(card, d.orientation, "sm")}
           <div class="flex-text"><b>${esc(d.positionLabel)}：${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</b></div>
         </div>
+        <div class="scenario-text" style="margin-top:10px">
+          <p>${esc(cardMeaningText(card, d.orientation))}</p>
+          ${j.scenario && j.scenario !== 'other' ? `<p><b>${SCENARIO_LABELS[j.scenario] || ''}场景：</b>${esc(getScenarioText(card, j.scenario, d.orientation))}</p>` : ''}
+        </div>
       </div>`;
     }).join("")}
-    <div class="card-panel"><b>综合解读：</b><p>${nl2br(j.summary || "（未填写）")}</p></div>
+    ${!editing ? `<div class="card-panel"><b>综合解读：</b><p>${nl2br(j.summary || "（未填写）")}</p></div>` : ''}
     <button class="link-btn" data-action="delete-journal" data-id="${j.id}">删除这条记录</button>`;
   }
 
@@ -663,6 +681,15 @@
       },
       "restart-practice": () => { practiceState = null; window._practiceInterpIdx = 0; nav("practice"); },
       "delete-journal": () => { if (confirm("确定删除这条日记？")) { window.TarotStorage.deleteJournalEntry(el.dataset.id); nav("journal"); } },
+      "edit-journal": () => { window._journalEditingId = el.dataset.id; rerender(); },
+      "cancel-journal-edit": () => { window._journalEditingId = null; rerender(); },
+      "save-journal-edit": () => {
+        const question = document.getElementById("journal-edit-question").value.trim();
+        const summary = document.getElementById("journal-edit-summary").value.trim();
+        window.TarotStorage.updateJournalEntry(el.dataset.id, { question, summary });
+        window._journalEditingId = null;
+        rerender();
+      },
       "export-data": () => {
         const dump = window.TarotStorage.exportAll();
         const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });

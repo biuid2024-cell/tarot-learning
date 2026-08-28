@@ -65,6 +65,14 @@
       const all = Storage.getJournal().filter(j => j.id !== id);
       writeJSON(KEYS.journal, all);
     },
+    updateJournalEntry(id, patch) {
+      const all = Storage.getJournal();
+      const idx = all.findIndex(j => j.id === id);
+      if (idx === -1) return null;
+      all[idx] = Object.assign({}, all[idx], patch);
+      writeJSON(KEYS.journal, all);
+      return all[idx];
+    },
 
     // ---- 自定义牌阵 ----
     getCustomSpreads() { return readJSON(KEYS.customSpreads, []); },
