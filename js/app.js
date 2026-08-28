@@ -120,6 +120,11 @@
   }
 
   // ---------- 记忆模块：顶部一个「学习 / 牌库」切换，两个子页面平级，牌库不再是藏起来的小字入口 ----------
+  // 用同一个「顶部行」组件（只放设置齿轮，不放标题），确保「学习」「牌库」两个页面里
+  // 这一排切换按钮出现在完全相同的高度，不会因为牌库多了个页面标题而往下多顶一截。
+  function learnTopRowHTML() {
+    return `<div class="learn-toprow"><a href="#/settings" class="learn-settings" onclick="event.stopPropagation()">${gearSVG()}</a></div>`;
+  }
   function learnSectionSwitchHTML(active) {
     return `<div class="seg-ctrl">
       <a href="#/learn" class="seg-btn ${active === 'study' ? 'active' : ''}">学习</a>
@@ -166,9 +171,9 @@
     }
     return `
     <div class="hero-daily">
-      <a href="#/settings" class="hero-settings" onclick="event.stopPropagation()">${gearSVG()}</a>
       <div class="hero-vignette top"></div>
       <div class="hero-vignette bottom"></div>
+      ${learnTopRowHTML()}
       ${learnSectionSwitchHTML("study")}
       <div class="hero-progress">
         <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
@@ -187,7 +192,7 @@
     if (filter === "major") cards = cards.filter(c => c.arcana === "major");
     else if (filter !== "all") cards = cards.filter(c => c.suit === filter);
     return `
-    ${headerHTML("塔罗牌库")}
+    ${learnTopRowHTML()}
     ${learnSectionSwitchHTML("grid")}
     <div class="filter-row">${filters.map(([k, label]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-action="learn-filter" data-value="${k}">${label}</button>`
@@ -288,6 +293,33 @@
       </a>`).join("")}
     </div>`;
   }
+  // 根据位置数量 n 和选定的排列方式，自动计算每个位置在地图中的 x/y 百分比坐标。
+  // 这样自定义牌阵也能真正“摆好位置”，而不是只能增减数量、每张牌都挤在一行。
+  function computeAutoPositions(n, layout) {
+    if (layout === "grid") {
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+      const rows = Math.ceil(n / cols);
+      const arr = [];
+      for (let i = 0; i < n; i++) {
+        const r = Math.floor(i / cols), c = i % cols;
+        const lastRow = r === rows - 1;
+        const rowCount = lastRow ? (n - cols * (rows - 1)) : cols;
+        arr.push({ x: ((c + 1) / (rowCount + 1)) * 100, y: ((r + 1) / (rows + 1)) * 100 });
+      }
+      return arr;
+    }
+    if (layout === "circle") {
+      if (n === 1) return [{ x: 50, y: 50 }];
+      const arr = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+        arr.push({ x: 50 + 38 * Math.cos(angle), y: 50 + 38 * Math.sin(angle) });
+      }
+      return arr;
+    }
+    // row：默认横向一排
+    return Array.from({ length: n }, (_, i) => ({ x: ((i + 1) / (n + 1)) * 100, y: 50 }));
+  }
   function spreadPositionsMapHTML(spread, activeId) {
     return `<div class="spread-map">
       ${spread.positions.map(p => `<button class="spread-dot ${p.id === activeId ? 'active' : ''}" style="left:${p.x}%;top:${p.y}%" data-action="show-position" data-idx="${p.id}">${p.id}</button>`).join("")}
@@ -310,13 +342,21 @@
     ${spread.custom ? `<button class="link-btn" data-action="delete-spread" data-id="${spread.id}">删除这个自定义牌阵</button>` : ""}`;
   }
   function viewSpreadCreator() {
-    const draft = window._spreadDraft || { name: "", positions: [{ label: "", desc: "" }, { label: "", desc: "" }, { label: "", desc: "" }] };
+    const draft = window._spreadDraft || { name: "", layout: "row", positions: [{ label: "", desc: "" }, { label: "", desc: "" }, { label: "", desc: "" }] };
+    if (!draft.layout) draft.layout = "row";
     window._spreadDraft = draft;
+    const layoutOptions = [["row", "横向一排"], ["grid", "网格排列"], ["circle", "环形排列"]];
+    const previewCoords = computeAutoPositions(draft.positions.length, draft.layout);
+    const previewSpread = { positions: draft.positions.map((p, i) => ({ id: i + 1, x: previewCoords[i].x, y: previewCoords[i].y })) };
     return `
     ${headerHTML("新建牌阵", { back: "spreads" })}
     <div class="card-panel">
       <label>牌阵名称</label>
       <input id="spread-name" value="${esc(draft.name)}" placeholder="例如：我的三牌阵" />
+      <label>排列方式</label>
+      <select id="spread-layout">${layoutOptions.map(([k, l]) => `<option value="${k}" ${draft.layout === k ? 'selected' : ''}>${l}</option>`).join("")}</select>
+      <p class="input-hint">下面是实时预览，换个排列方式会立即看到所有位置的摆放效果变化。</p>
+      ${spreadPositionsMapHTML(previewSpread, null)}
       <div id="spread-positions">
         ${draft.positions.map((p, i) => `
           <div class="position-row">
@@ -333,11 +373,13 @@
       <button class="btn btn-primary full-width" data-action="save-spread">保存牌阵</button>
     </div>`;
   }
-  // 在“增加/减少位置”导致整页重渲染之前，先把当前表单里已经填写的内容同步回草稿，避免丢失
+  // 在"增加/减少位置"导致整页重渲染之前，先把当前表单里已经填写的内容同步回草稿，避免丢失
   function syncSpreadDraftFromForm() {
     if (!window._spreadDraft) return;
     const nameInput = document.getElementById("spread-name");
     if (nameInput) window._spreadDraft.name = nameInput.value;
+    const layoutSelect = document.getElementById("spread-layout");
+    if (layoutSelect) window._spreadDraft.layout = layoutSelect.value;
     const labels = Array.from(document.querySelectorAll(".pos-label"));
     const descs = Array.from(document.querySelectorAll(".pos-desc"));
     window._spreadDraft.positions.forEach((p, i) => {
@@ -549,7 +591,18 @@
         rerender();
       },
       "delete-note": () => { window.TarotStorage.deleteNote(el.dataset.id); rerender(); },
-      "flip-flash": () => { flashState.revealed = true; rerender(); },
+      "flip-flash": () => {
+        if (flashState.revealed) return;
+        // 先播放一个短暂的“翻牌”动效再展示解读文字，给一点真实的翻牌互动感，
+        // 不是点一下就干巴巴地蹦出文字。
+        const inner = el.querySelector(".tcard-inner");
+        if (inner) {
+          inner.classList.add("flip-anim");
+          setTimeout(() => { flashState.revealed = true; rerender(); }, 380);
+        } else {
+          flashState.revealed = true; rerender();
+        }
+      },
       "rate-flash": () => {
         const item = flashState.queue[flashState.index];
         window.TarotSRS.review(item.key, parseInt(el.dataset.rating, 10));
@@ -563,11 +616,12 @@
       "remove-position": () => { syncSpreadDraftFromForm(); if (window._spreadDraft.positions.length > 1) window._spreadDraft.positions.pop(); rerender(); },
       "save-spread": () => {
         const name = document.getElementById("spread-name").value.trim();
+        const layout = (document.getElementById("spread-layout") || {}).value || "row";
         const labels = Array.from(document.querySelectorAll(".pos-label")).map(i => i.value.trim());
         const descs = Array.from(document.querySelectorAll(".pos-desc")).map(i => i.value.trim());
         if (!name || labels.some(l => !l)) return alert("请填写牌阵名称和每个位置的名称");
-        const n = labels.length;
-        const positions = labels.map((label, i) => ({ id: i + 1, label, desc: descs[i], x: ((i + 1) / (n + 1)) * 100, y: 50 }));
+        const coords = computeAutoPositions(labels.length, layout);
+        const positions = labels.map((label, i) => ({ id: i + 1, label, desc: descs[i], x: coords[i].x, y: coords[i].y }));
         window.TarotStorage.addCustomSpread({ name, positions, difficulty: "自定义", scenarios: ["不限"], desc: "自定义牌阵" });
         window._spreadDraft = null;
         nav("spreads");
@@ -624,6 +678,10 @@
     if (e.target.id === "set-reversed-prob") {
       window.TarotStorage.setSettings({ reversedProb: parseFloat(e.target.value) });
       document.getElementById("rp-val").textContent = Math.round(e.target.value * 100) + "%";
+    }
+    if (e.target.id === "spread-layout") {
+      syncSpreadDraftFromForm();
+      rerender();
     }
     if (e.target.id === "import-file") {
       const file = e.target.files[0];
