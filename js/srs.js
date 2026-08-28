@@ -37,18 +37,20 @@
       window.TarotStorage.setSRSItem(key, cur);
       return cur;
     },
-    // 统计整体进度：已学习数 / 总数 / 今日待复习数
+    // 统计整体进度：已学习数 / 总数 / 今日待复习数（不含从未学过的新卡）
     getStats(allCards) {
-      let studied = 0, dueToday = 0, total = 0;
+      let studied = 0, dueToday = 0, total = 0, newCount = 0;
       allCards.forEach(card => {
         allOrientKeys(card.id).forEach(key => {
           total++;
           const item = SRS.getItem(key);
-          if (item.reviews > 0) studied++;
+          const isNew = item.reviews === 0;
+          if (isNew) { newCount++; return; }
+          studied++;
           if (SRS.isDue(key)) dueToday++;
         });
       });
-      return { studied, total, dueToday };
+      return { studied, total, dueToday, newCount };
     },
     // 生成一批用于闪卡模式的队列：mode = 'new' | 'due' | 'all'
     buildQueue(allCards, mode) {

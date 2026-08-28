@@ -38,39 +38,20 @@
     return { card, orientation: randomOrientation() };
   }
 
-  // ---------- 卡牌视觉组件（不用emoji，用大字形+质感渐变+线性图标） ----------
-  const ROMAN = ["0","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI"];
-  function cardGradient(card) {
-    let hue;
-    if (card.arcana === "major") hue = (card.number * 14) % 360;
-    else {
-      const base = { wands: 18, cups: 212, swords: 224, pentacles: 140 }[card.suit];
-      hue = (base + card.number * 3) % 360;
-    }
-    return `linear-gradient(155deg, hsl(${hue},30%,20%) 0%, #131110 72%)`;
-  }
-  function suitGlyphSVG(suit) {
-    const paths = {
-      wands: '<line x1="50" y1="88" x2="50" y2="22" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M50 4 L62 22 L50 36 L38 22 Z" fill="currentColor"/>',
-      cups: '<path d="M24 14 Q24 58 50 58 Q76 58 76 14 Z" fill="none" stroke="currentColor" stroke-width="5"/><line x1="50" y1="58" x2="50" y2="82" stroke="currentColor" stroke-width="5"/><line x1="30" y1="92" x2="70" y2="92" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>',
-      swords: '<line x1="50" y1="8" x2="50" y2="78" stroke="currentColor" stroke-width="5"/><line x1="28" y1="34" x2="72" y2="34" stroke="currentColor" stroke-width="5"/><path d="M50 78 L60 92 L40 92 Z" fill="currentColor"/>',
-      pentacles: '<path d="M50 6 L61 38 L94 38 L67 58 L78 92 L50 71 L22 92 L33 58 L6 38 L39 38 Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>'
-    };
-    return `<svg viewBox="0 0 100 100">${paths[suit]}</svg>`;
-  }
+  // ---------- 卡牌视觉组件（真实韦特-史密斯塔罗牌图，assets/cards/*.jpg） ----------
+  function cardImagePath(card) { return `assets/cards/${card.id.toLowerCase()}.jpg`; }
   function moonGlyphSVG() {
     return `<svg viewBox="0 0 100 100"><path d="M64 18 A34 34 0 1 0 64 84 A25 25 0 1 1 64 18 Z" fill="currentColor"/></svg>`;
   }
-  function cardFaceHTML(card, orientation, size, opts) {
-    opts = opts || {};
+  function gearSVG() {
+    return `<svg class="icon-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.6a7.6 7.6 0 000-3.2l1.7-1.3-1.7-2.9-2 .5a7.6 7.6 0 00-2.7-1.6l-.4-2.1h-3.4l-.4 2.1a7.6 7.6 0 00-2.7 1.6l-2-.5-1.7 2.9 1.7 1.3a7.6 7.6 0 000 3.2l-1.7 1.3 1.7 2.9 2-.5a7.6 7.6 0 002.7 1.6l.4 2.1h3.4l.4-2.1a7.6 7.6 0 002.7-1.6l2 .5 1.7-2.9z"/></svg>`;
+  }
+  function cardFaceHTML(card, orientation, size) {
     const rot = orientation === "reversed" ? "transform:rotate(180deg);" : "";
-    const glyph = card.arcana === "major"
-      ? `<div class="tcard-numeral">${ROMAN[card.number]}</div>`
-      : `<div class="tcard-glyph">${suitGlyphSVG(card.suit)}</div>`;
-    const labelBlock = opts.hideName ? "" : `<div class="tcard-name">${esc(card.name)}</div><div class="tcard-sub">${card.arcana === 'major' ? '大阿尔卡那' : window.TAROT_SUITS[card.suit].name}</div>`;
-    return `<div class="tcard tcard-${size || 'md'}" style="--card-bg:${cardGradient(card)}">
-      <div class="tcard-inner${opts.hideName ? ' no-label' : ''}" style="${rot}">
-        ${glyph}${labelBlock}
+    return `<div class="tcard tcard-${size || 'md'}">
+      <div class="tcard-inner" style="${rot}">
+        <img class="tcard-img" src="${cardImagePath(card)}" alt="${esc(card.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="tcard-fallback"><span>${esc(card.name)}</span></div>
       </div>
     </div>`;
   }
@@ -79,7 +60,7 @@
   }
 
   // ---------- 路由 ----------
-  function currentHash() { return (location.hash || "#/home").slice(2); }
+  function currentHash() { return (location.hash || "#/learn").slice(2); }
   function nav(path) { location.hash = "#/" + path; }
   function parts() { return currentHash().split("/").filter(Boolean); }
 
@@ -88,24 +69,27 @@
 
   function render() {
     const p = parts();
-    const root = p[0] || "home";
-    let html = "";
-    if (root === "home") html = viewHome();
-    else if (root === "learn") html = p[1] === "card" ? viewCardDetail(p[2]) : (p[1] === "flash" ? viewFlash(p[2] || "new") : viewLearnGrid());
+    const root = p[0] || "learn";
+    let html = "", isHero = false;
+    if (root === "learn") {
+      if (p[1] === "card") html = viewCardDetail(p[2]);
+      else if (p[1] === "grid") html = viewLearnGrid();
+      else { html = viewLearnHome(); isHero = true; }
+    }
     else if (root === "spreads") html = p[1] === "new" ? viewSpreadCreator() : (p[1] ? viewSpreadDetail(p[1]) : viewSpreadsList());
     else if (root === "practice") html = p[1] === "session" ? viewPracticeSession() : viewPracticeStart();
     else if (root === "journal") html = p[1] ? viewJournalDetail(p[1]) : viewJournalList();
     else if (root === "settings") html = viewSettings();
-    else html = viewHome();
+    else { html = viewLearnHome(); isHero = true; }
 
-    const pageClass = root === "home" ? "page flush" : "page";
-    $app.innerHTML = `<div class="${pageClass}">${html}</div>` + navBarHTML(root);
-    window.scrollTo(0, 0);
+    const pageClass = isHero ? "page flush" : "page";
+    $app.innerHTML = `<div class="page-scroll"><div class="${pageClass}">${html}</div></div>` + navBarHTML(root);
+    const scroller = $app.querySelector(".page-scroll");
+    if (scroller) scroller.scrollTop = 0;
   }
 
   function navBarHTML(active) {
     const items = [
-      { id: "home", label: "每日" },
       { id: "learn", label: "记忆" },
       { id: "spreads", label: "牌阵" },
       { id: "practice", label: "实战" },
@@ -120,73 +104,77 @@
     return `<header class="topbar">
       ${opts.back ? `<a href="#/${opts.back}" class="topbar-back">‹</a>` : `<span style="width:28px"></span>`}
       <h1>${esc(title)}</h1>
-      <a href="#/settings" class="topbar-settings">设置</a>
+      <a href="#/settings" class="topbar-settings">${gearSVG()}</a>
     </header>`;
   }
 
-  // ---------- 首页 ----------
-  function getDailyCard() {
-    const today = new Date().toISOString().slice(0, 10);
-    let d = null;
-    try { d = JSON.parse(localStorage.getItem("tarot_daily_v1") || "null"); } catch (e) {}
-    if (!d || d.date !== today) {
-      const { card, orientation } = drawRandomCard([]);
-      d = { date: today, cardId: card.id, orientation, revealed: false };
-      localStorage.setItem("tarot_daily_v1", JSON.stringify(d));
-    }
-    return d;
+  // ---------- 记忆模块入口：没有独立首页，一进来就是学新牌/复习的大卡片交互 ----------
+  function defaultLearnMode() {
+    return window.TarotSRS.getStats(window.TAROT_ALL_CARDS).dueToday > 0 ? "due" : "new";
   }
-  function viewHome() {
-    const daily = getDailyCard();
-    const card = getCardById(daily.cardId);
-    return `
-    <div class="hero-daily" data-action="flip-daily">
-      <a href="#/settings" class="hero-settings" onclick="event.stopPropagation()">设置</a>
-      <div class="hero-vignette top"></div>
-      <div class="hero-vignette bottom"></div>
-      <div class="hero-label">每日一牌</div>
-      <div class="hero-card-wrap">${daily.revealed ? cardFaceHTML(card, daily.orientation, "hero") : cardBackHTML("hero")}</div>
-      ${daily.revealed ? `
+  function viewLearnHome() {
+    const mode = window._learnMode || defaultLearnMode();
+    window._learnMode = mode;
+    if (!flashState || flashState.mode !== mode) {
+      const queue = window.TarotSRS.buildQueue(window.TAROT_ALL_CARDS, mode);
+      flashState = { mode, queue, index: 0, revealed: false, total: queue.length };
+    }
+    const stats = window.TarotSRS.getStats(window.TAROT_ALL_CARDS);
+    const modes = [["due", "到期复习"], ["new", "学新牌"], ["all", "全部练习"]];
+    let body;
+    if (flashState.queue.length === 0) {
+      body = `<div class="hero-hint">这个模式暂时没有待处理的卡片</div>`;
+    } else if (flashState.index >= flashState.queue.length) {
+      body = `<div class="hero-hint">本轮已完成</div><div class="hero-recap"><div class="recap-meaning">共练习了 ${flashState.total} 张，换个模式或去浏览全部牌面吧</div></div>`;
+    } else {
+      const item = flashState.queue[flashState.index];
+      const card = item.card;
+      body = `<div class="hero-card-wrap" data-action="flip-flash">${flashState.revealed ? cardFaceHTML(card, item.orientation, "hero") : cardBackHTML("hero")}</div>
+      ${!flashState.revealed ? `<div class="hero-hint">轻触查看</div>` : `
       <div class="hero-recap">
         <div class="recap-name">${esc(card.name)}</div>
-        <div class="recap-orient">${daily.orientation === 'upright' ? '正位' : '逆位'}</div>
-        <div class="recap-meaning">${esc(cardMeaningText(card, daily.orientation))}</div>
-      </div>` : `<div class="hero-hint">轻触查看</div>`}
+        <div class="recap-orient">${item.orientation === 'upright' ? '正位' : '逆位'}</div>
+        <div class="recap-meaning">${esc(cardMeaningText(card, item.orientation))}</div>
+      </div>
+      <div class="hero-rating-row">
+        <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全不会</button>
+        <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
+        <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">记得</button>
+        <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟</button>
+      </div>`}`;
+    }
+    return `
+    <div class="hero-daily">
+      <a href="#/settings" class="hero-settings" onclick="event.stopPropagation()">${gearSVG()}</a>
+      <div class="hero-vignette top"></div>
+      <div class="hero-vignette bottom"></div>
+      <div class="hero-progress">
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
+        <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday}</p>
+      </div>
+      <div class="hero-mode-row">${modes.map(([k, l]) => `<button class="chip ${mode === k ? 'active' : ''}" data-action="learn-mode" data-value="${k}">${l}</button>`).join("")}</div>
+      ${body}
+      <a href="#/learn/grid" class="hero-footer-link">浏览全部牌面 →</a>
     </div>`;
   }
 
-  // ---------- 记忆学习：全量浏览 ----------
+  // ---------- 记忆学习：全部牌面浏览 ----------
   function viewLearnGrid() {
     const filter = window._learnFilter || "all";
     const filters = [["all", "全部"], ["major", "大阿尔卡那"], ["wands", "权杖"], ["cups", "圣杯"], ["swords", "宝剑"], ["pentacles", "星币"]];
     let cards = window.TAROT_ALL_CARDS;
     if (filter === "major") cards = cards.filter(c => c.arcana === "major");
     else if (filter !== "all") cards = cards.filter(c => c.suit === filter);
-    const stats = window.TarotSRS.getStats(window.TAROT_ALL_CARDS);
     return `
-    ${headerHTML("记忆学习", { back: "home" })}
-    <div class="card-panel">
-      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
-      <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday} 张</p>
-    </div>
+    ${headerHTML("全部牌面", { back: "learn" })}
     <div class="filter-row">${filters.map(([k, label]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-action="learn-filter" data-value="${k}">${label}</button>`
     ).join("")}</div>
-    <div class="flash-entry-row">
-      <a class="btn btn-outline" href="#/learn/flash/new">学新牌</a>
-      <a class="btn btn-outline" href="#/learn/flash/due">复习到期</a>
-      <a class="btn btn-outline" href="#/learn/flash/all">全量练习</a>
-    </div>
     <div class="grid">
-      ${cards.map(c => {
-        const key = window.TarotSRS.keyOf(c.id, "upright");
-        const item = window.TarotSRS.getItem(key);
-        const dot = item.reviews === 0 ? "dot-new" : (item.box >= 3 ? "dot-mastered" : "dot-learning");
-        return `<a class="grid-item" href="#/learn/card/${c.id}">
-          <div class="grid-thumb">${cardFaceHTML(c, "upright", "xs", { hideName: true })}<span class="dot ${dot}"></span></div>
+      ${cards.map(c => `<a class="grid-item" href="#/learn/card/${c.id}">
+          <div class="grid-thumb">${cardFaceHTML(c, "upright", "xs")}</div>
           <div class="grid-name">${esc(c.name)}</div>
-        </a>`;
-      }).join("")}
+        </a>`).join("")}
     </div>`;
   }
 
@@ -198,7 +186,7 @@
     const upNotes = myNotesFor(card.id, "upright", null);
     const revNotes = myNotesFor(card.id, "reversed", null);
     return `
-    ${headerHTML(card.name, { back: "learn" })}
+    ${headerHTML(card.name, { back: "learn/grid" })}
     <div class="card-detail-face">${cardFaceHTML(card, "upright", "lg")}</div>
     <h2 class="card-title">${esc(card.name)} <span class="muted">${esc(card.nameEn)}</span></h2>
     <div class="orientation-block">
@@ -262,50 +250,13 @@
     </div>`;
   }
 
-  // ---------- 记忆闪卡 ----------
-  function viewFlash(mode) {
-    if (!flashState || flashState.mode !== mode) {
-      const queue = window.TarotSRS.buildQueue(window.TAROT_ALL_CARDS, mode);
-      flashState = { mode, queue, index: 0, revealed: false, total: queue.length };
-    }
-    if (flashState.index >= flashState.queue.length) {
-      return `${headerHTML("记忆闪卡", { back: "learn" })}
-      <div class="card-panel center-text">
-        <h3>本轮完成</h3>
-        <p>共练习了 ${flashState.total} 张卡片</p>
-        <a class="btn btn-primary" href="#/learn">返回记忆学习</a>
-      </div>`;
-    }
-    const item = flashState.queue[flashState.index];
-    const card = item.card;
-    return `
-    ${headerHTML("记忆闪卡", { back: "learn" })}
-    <p class="muted center-text">剩余 ${flashState.queue.length - flashState.index}/${flashState.total}</p>
-    <div class="flash-card-area" data-action="flip-flash">
-      ${flashState.revealed ? cardFaceHTML(card, item.orientation, "lg") : cardBackHTML("lg")}
-    </div>
-    ${!flashState.revealed
-      ? `<p class="center-text muted">轻触卡片 → 翻面看含义</p>`
-      : `<div class="card-panel">
-          <h3>${esc(card.name)} · ${item.orientation === 'upright' ? '正位' : '逆位'}</h3>
-          <div class="keywords">${cardKeywords(card, item.orientation).map(k => `<span class="kw">${esc(k)}</span>`).join("")}</div>
-          <p>${esc(cardMeaningText(card, item.orientation))}</p>
-          <a class="link-btn" href="#/learn/card/${card.id}">查看完整详情 →</a>
-        </div>
-        <p class="center-text muted">你的记忆情况：</p>
-        <div class="rating-row">
-          <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全不会</button>
-          <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
-          <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">记得</button>
-          <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟</button>
-        </div>`}`;
-  }
+  // ---------- 记忆闪卡（已合并进“记忆”模块入口 viewLearnHome，本处不再需要单独页面函数）
 
   // ---------- 牌阵学习 ----------
   function viewSpreadsList() {
     const spreads = window.TarotStorage.getAllSpreads();
     return `
-    ${headerHTML("牌阵学习", { back: "home" })}
+    ${headerHTML("牌阵学习")}
     <a class="btn btn-outline full-width" href="#/spreads/new">+ 自定义牌阵</a>
     <div class="spread-list">
       ${spreads.map(s => `<a class="spread-card" href="#/spreads/${s.id}">
@@ -378,7 +329,7 @@
     const spreads = window.TarotStorage.getAllSpreads();
     const scenario = window._practiceScenario || "love";
     return `
-    ${headerHTML("开始一次解读", { back: "home" })}
+    ${headerHTML("开始一次解读")}
     <div class="card-panel">
       <h4>你想问什么类型的问题？</h4>
       <div class="filter-row">
@@ -485,7 +436,7 @@
   function viewJournalList() {
     const list = window.TarotStorage.getJournal();
     return `
-    ${headerHTML("塔罗日记", { back: "home" })}
+    ${headerHTML("塔罗日记")}
     ${list.length === 0 ? `<p class="muted center-text">还没有记录，去「实战抽牌」做一次解读试试吧。</p>` : ""}
     <div class="journal-list">
       ${list.map(j => `<a class="journal-item" href="#/journal/${j.id}">
@@ -519,19 +470,24 @@
   function viewSettings() {
     const s = window.TarotStorage.getSettings();
     return `
-    ${headerHTML("设置", { back: "home" })}
+    ${headerHTML("设置", { back: "learn" })}
     <div class="card-panel">
-      <h4>SRS 记忆参数</h4>
-      <label class="switch-row"><span>区分正逆位记忆</span><input type="checkbox" id="set-distinguish" ${s.distinguishReversed ? 'checked' : ''}/></label>
+      <h4>记忆参数</h4>
+      <div class="setting-row">
+        <span class="setting-label">区分正逆位记忆</span>
+        <button class="switch ${s.distinguishReversed ? 'on' : ''}" data-action="toggle-distinguish"><span class="switch-knob"></span></button>
+      </div>
+      <p class="setting-desc">开启后，同一张牌的正位和逆位会被当成两条独立的记忆记录分别追踪熟练度；关闭则只练正位。</p>
       <label>逆位出现概率：<span id="rp-val">${Math.round(s.reversedProb * 100)}%</span></label>
       <input type="range" id="set-reversed-prob" min="0" max="1" step="0.1" value="${s.reversedProb}"/>
+      <p class="setting-desc">抽牌、闪卡练习时，卡牌显示为逆位的概率。</p>
     </div>
     <div class="card-panel">
-      <h4>数据管理</h4>
-      <p class="muted">你的所有数据都只保存在这个浏览器里，换设备/清缓存前请记得导出备份。</p>
-      <button class="btn btn-outline full-width" data-action="export-data">导出全部数据 (JSON)</button>
+      <h4>数据备份</h4>
+      <p class="setting-desc">你在这里学到的进度、写下的解读、每一次抽牌记录，都只保存在这一台设备的这个浏览器里。换手机、清缓存前，记得先导出备份；换到新设备后，用导入把数据找回来。</p>
+      <button class="btn btn-outline full-width" data-action="export-data">导出数据备份</button>
       <label class="btn btn-outline full-width" style="text-align:center;display:block;">
-        导入数据 (JSON)<input type="file" id="import-file" accept="application/json" style="display:none"/>
+        导入数据备份<input type="file" id="import-file" accept="application/json" style="display:none"/>
       </label>
       <button class="btn btn-danger full-width" data-action="reset-data">清空重置所有数据</button>
     </div>
@@ -546,12 +502,7 @@
     if (!el) return;
     const action = el.dataset.action;
     const handlers = {
-      "flip-daily": () => {
-        const d = JSON.parse(localStorage.getItem("tarot_daily_v1"));
-        d.revealed = true;
-        localStorage.setItem("tarot_daily_v1", JSON.stringify(d));
-        render();
-      },
+      "learn-mode": () => { window._learnMode = el.dataset.value; flashState = null; render(); },
       "learn-filter": () => { window._learnFilter = el.dataset.value; render(); },
       "detail-scenario": () => { window._detailScenario = el.dataset.value; render(); },
       "open-add-note": () => {
@@ -565,6 +516,11 @@
         const text = document.getElementById("note-text").value.trim();
         if (!text) return alert("请先填写内容");
         window.TarotStorage.addNote({ cardId, orientation, scenario, text });
+        render();
+      },
+      "toggle-distinguish": () => {
+        const cur = window.TarotStorage.getSettings();
+        window.TarotStorage.setSettings({ distinguishReversed: !cur.distinguishReversed });
         render();
       },
       "delete-note": () => { window.TarotStorage.deleteNote(el.dataset.id); render(); },
@@ -640,7 +596,6 @@
   });
 
   document.addEventListener("change", function (e) {
-    if (e.target.id === "set-distinguish") window.TarotStorage.setSettings({ distinguishReversed: e.target.checked });
     if (e.target.id === "set-reversed-prob") {
       window.TarotStorage.setSettings({ reversedProb: parseFloat(e.target.value) });
       document.getElementById("rp-val").textContent = Math.round(e.target.value * 100) + "%";
