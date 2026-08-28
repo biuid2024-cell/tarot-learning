@@ -38,20 +38,44 @@
     return { card, orientation: randomOrientation() };
   }
 
-  // ---------- 卡牌视觉组件 ----------
-  function cardFaceHTML(card, orientation, size) {
-    const suitColor = card.arcana === "major" ? "#7b4fa0" : window.TAROT_SUITS[card.suit].color;
+  // ---------- 卡牌视觉组件（不用emoji，用大字形+质感渐变+线性图标） ----------
+  const ROMAN = ["0","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI"];
+  function cardGradient(card) {
+    let hue;
+    if (card.arcana === "major") hue = (card.number * 14) % 360;
+    else {
+      const base = { wands: 18, cups: 212, swords: 224, pentacles: 140 }[card.suit];
+      hue = (base + card.number * 3) % 360;
+    }
+    return `linear-gradient(155deg, hsl(${hue},30%,20%) 0%, #131110 72%)`;
+  }
+  function suitGlyphSVG(suit) {
+    const paths = {
+      wands: '<line x1="50" y1="88" x2="50" y2="22" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M50 4 L62 22 L50 36 L38 22 Z" fill="currentColor"/>',
+      cups: '<path d="M24 14 Q24 58 50 58 Q76 58 76 14 Z" fill="none" stroke="currentColor" stroke-width="5"/><line x1="50" y1="58" x2="50" y2="82" stroke="currentColor" stroke-width="5"/><line x1="30" y1="92" x2="70" y2="92" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>',
+      swords: '<line x1="50" y1="8" x2="50" y2="78" stroke="currentColor" stroke-width="5"/><line x1="28" y1="34" x2="72" y2="34" stroke="currentColor" stroke-width="5"/><path d="M50 78 L60 92 L40 92 Z" fill="currentColor"/>',
+      pentacles: '<path d="M50 6 L61 38 L94 38 L67 58 L78 92 L50 71 L22 92 L33 58 L6 38 L39 38 Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>'
+    };
+    return `<svg viewBox="0 0 100 100">${paths[suit]}</svg>`;
+  }
+  function moonGlyphSVG() {
+    return `<svg viewBox="0 0 100 100"><path d="M64 18 A34 34 0 1 0 64 84 A25 25 0 1 1 64 18 Z" fill="currentColor"/></svg>`;
+  }
+  function cardFaceHTML(card, orientation, size, opts) {
+    opts = opts || {};
     const rot = orientation === "reversed" ? "transform:rotate(180deg);" : "";
-    return `<div class="tcard tcard-${size || 'md'}" style="--suit-color:${suitColor}">
-      <div class="tcard-inner" style="${rot}">
-        <div class="tcard-icon">${card.icon}</div>
-        <div class="tcard-name">${esc(card.name)}</div>
-        <div class="tcard-sub">${card.arcana === 'major' ? '大阿尔卡那 ' + card.number : window.TAROT_SUITS[card.suit].name}</div>
+    const glyph = card.arcana === "major"
+      ? `<div class="tcard-numeral">${ROMAN[card.number]}</div>`
+      : `<div class="tcard-glyph">${suitGlyphSVG(card.suit)}</div>`;
+    const labelBlock = opts.hideName ? "" : `<div class="tcard-name">${esc(card.name)}</div><div class="tcard-sub">${card.arcana === 'major' ? '大阿尔卡那' : window.TAROT_SUITS[card.suit].name}</div>`;
+    return `<div class="tcard tcard-${size || 'md'}" style="--card-bg:${cardGradient(card)}">
+      <div class="tcard-inner${opts.hideName ? ' no-label' : ''}" style="${rot}">
+        ${glyph}${labelBlock}
       </div>
     </div>`;
   }
   function cardBackHTML(size) {
-    return `<div class="tcard tcard-${size || 'md'} tcard-back"><div class="tcard-back-pattern">🔮</div></div>`;
+    return `<div class="tcard tcard-${size || 'md'} tcard-back"><div class="tcard-back-glyph">${moonGlyphSVG()}</div></div>`;
   }
 
   // ---------- 路由 ----------
@@ -74,28 +98,29 @@
     else if (root === "settings") html = viewSettings();
     else html = viewHome();
 
-    $app.innerHTML = `<div class="page">${html}</div>` + navBarHTML(root);
+    const pageClass = root === "home" ? "page flush" : "page";
+    $app.innerHTML = `<div class="${pageClass}">${html}</div>` + navBarHTML(root);
     window.scrollTo(0, 0);
   }
 
   function navBarHTML(active) {
     const items = [
-      { id: "home", icon: "🏠", label: "首页" },
-      { id: "learn", icon: "📖", label: "记忆" },
-      { id: "spreads", icon: "🃏", label: "牌阵" },
-      { id: "practice", icon: "🎯", label: "实战" },
-      { id: "journal", icon: "📔", label: "日记" }
+      { id: "home", label: "每日" },
+      { id: "learn", label: "记忆" },
+      { id: "spreads", label: "牌阵" },
+      { id: "practice", label: "实战" },
+      { id: "journal", label: "日记" }
     ];
     return `<nav class="navbar">${items.map(it =>
-      `<a href="#/${it.id}" class="nav-item ${active === it.id ? 'active' : ''}"><span class="nav-icon">${it.icon}</span><span>${it.label}</span></a>`
+      `<a href="#/${it.id}" class="nav-item ${active === it.id ? 'active' : ''}"><span>${it.label}</span><span class="nav-dot"></span></a>`
     ).join("")}</nav>`;
   }
   function headerHTML(title, opts) {
     opts = opts || {};
     return `<header class="topbar">
-      ${opts.back ? `<a href="#/${opts.back}" class="topbar-back">←</a>` : `<span></span>`}
+      ${opts.back ? `<a href="#/${opts.back}" class="topbar-back">‹</a>` : `<span style="width:28px"></span>`}
       <h1>${esc(title)}</h1>
-      <a href="#/settings" class="topbar-settings">⚙</a>
+      <a href="#/settings" class="topbar-settings">设置</a>
     </header>`;
   }
 
@@ -114,33 +139,20 @@
   function viewHome() {
     const daily = getDailyCard();
     const card = getCardById(daily.cardId);
-    const stats = window.TarotSRS.getStats(window.TAROT_ALL_CARDS);
-    const journalCount = window.TarotStorage.getJournal().length;
     return `
-    ${headerHTML("🔮 塔罗学习")}
-    <section class="card-panel">
-      <h3>今日一牌</h3>
-      <div class="daily-row">
-        <div data-action="flip-daily">${daily.revealed ? cardFaceHTML(card, daily.orientation, "sm") : cardBackHTML("sm")}</div>
-        <div class="daily-text">
-          ${daily.revealed
-            ? `<b>${esc(card.name)}（${daily.orientation === 'upright' ? '正位' : '逆位'}）</b><p>${esc(cardMeaningText(card, daily.orientation))}</p>`
-            : `<p>点击卡片翻面，看看今天适合关注什么。</p>`}
-        </div>
-      </div>
-    </section>
-    <section class="card-panel">
-      <h3>记忆进度</h3>
-      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
-      <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday} 张</p>
-      <a class="btn btn-primary" href="#/learn/flash/${stats.dueToday > 0 ? 'due' : 'new'}">开始复习 →</a>
-    </section>
-    <section class="quick-grid">
-      <a class="quick-card" href="#/learn">📖<br/>记忆学习</a>
-      <a class="quick-card" href="#/spreads">🃏<br/>牌阵学习</a>
-      <a class="quick-card" href="#/practice">🎯<br/>实战抽牌</a>
-      <a class="quick-card" href="#/journal">📔<br/>塔罗日记（${journalCount}）</a>
-    </section>`;
+    <div class="hero-daily" data-action="flip-daily">
+      <a href="#/settings" class="hero-settings" onclick="event.stopPropagation()">设置</a>
+      <div class="hero-vignette top"></div>
+      <div class="hero-vignette bottom"></div>
+      <div class="hero-label">每日一牌</div>
+      <div class="hero-card-wrap">${daily.revealed ? cardFaceHTML(card, daily.orientation, "hero") : cardBackHTML("hero")}</div>
+      ${daily.revealed ? `
+      <div class="hero-recap">
+        <div class="recap-name">${esc(card.name)}</div>
+        <div class="recap-orient">${daily.orientation === 'upright' ? '正位' : '逆位'}</div>
+        <div class="recap-meaning">${esc(cardMeaningText(card, daily.orientation))}</div>
+      </div>` : `<div class="hero-hint">轻触查看</div>`}
+    </div>`;
   }
 
   // ---------- 记忆学习：全量浏览 ----------
@@ -150,15 +162,20 @@
     let cards = window.TAROT_ALL_CARDS;
     if (filter === "major") cards = cards.filter(c => c.arcana === "major");
     else if (filter !== "all") cards = cards.filter(c => c.suit === filter);
+    const stats = window.TarotSRS.getStats(window.TAROT_ALL_CARDS);
     return `
     ${headerHTML("记忆学习", { back: "home" })}
+    <div class="card-panel">
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(stats.studied / stats.total * 100)}%"></div></div>
+      <p class="muted">${stats.studied}/${stats.total} 已学习 · 今日待复习 ${stats.dueToday} 张</p>
+    </div>
     <div class="filter-row">${filters.map(([k, label]) =>
       `<button class="chip ${filter === k ? 'active' : ''}" data-action="learn-filter" data-value="${k}">${label}</button>`
     ).join("")}</div>
     <div class="flash-entry-row">
-      <a class="btn btn-outline" href="#/learn/flash/new">🆕 学新牌</a>
-      <a class="btn btn-outline" href="#/learn/flash/due">⏰ 复习到期</a>
-      <a class="btn btn-outline" href="#/learn/flash/all">🔁 全量练习</a>
+      <a class="btn btn-outline" href="#/learn/flash/new">学新牌</a>
+      <a class="btn btn-outline" href="#/learn/flash/due">复习到期</a>
+      <a class="btn btn-outline" href="#/learn/flash/all">全量练习</a>
     </div>
     <div class="grid">
       ${cards.map(c => {
@@ -166,9 +183,8 @@
         const item = window.TarotSRS.getItem(key);
         const dot = item.reviews === 0 ? "dot-new" : (item.box >= 3 ? "dot-mastered" : "dot-learning");
         return `<a class="grid-item" href="#/learn/card/${c.id}">
-          <div class="grid-icon">${c.icon}</div>
+          <div class="grid-thumb">${cardFaceHTML(c, "upright", "xs", { hideName: true })}<span class="dot ${dot}"></span></div>
           <div class="grid-name">${esc(c.name)}</div>
-          <span class="dot ${dot}"></span>
         </a>`;
       }).join("")}
     </div>`;
@@ -186,26 +202,26 @@
     <div class="card-detail-face">${cardFaceHTML(card, "upright", "lg")}</div>
     <h2 class="card-title">${esc(card.name)} <span class="muted">${esc(card.nameEn)}</span></h2>
     <div class="orientation-block">
-      <h4>✅ 正位</h4>
+      <h4>正位</h4>
       <div class="keywords">${cardKeywords(card, "upright").map(k => `<span class="kw">${esc(k)}</span>`).join("")}</div>
       <p>${esc(cardMeaningText(card, "upright"))}</p>
       ${myNoteListHTML(upNotes)}
     </div>
     <div class="orientation-block reversed">
-      <h4>🔄 逆位</h4>
+      <h4>逆位</h4>
       <div class="keywords">${cardKeywords(card, "reversed").map(k => `<span class="kw">${esc(k)}</span>`).join("")}</div>
       <p>${esc(cardMeaningText(card, "reversed"))}</p>
       ${myNoteListHTML(revNotes)}
     </div>
     ${card.arcana === "minor" ? `
     <div class="logic-block">
-      <h4>🧩 速记逻辑</h4>
+      <h4>速记逻辑</h4>
       <p>花色 <b>${window.TAROT_SUITS[card.suit].name}</b>（${window.TAROT_SUITS[card.suit].element}元素）＝ ${window.TAROT_SUITS[card.suit].domain}</p>
       <p>数字 <b>${window.TAROT_NUMBER_META[card.number].label}</b> ＝ ${card._numberCore}</p>
       <p>组合 ＝ 上面两者叠加，不用死记，理解规律就能推出这张牌的含义。</p>
     </div>` : ""}
     <div class="scenario-block">
-      <h4>💬 不同场景下的解读</h4>
+      <h4>不同场景下的解读</h4>
       <div class="filter-row">${Object.entries(SCENARIO_LABELS).map(([k, label]) =>
         `<button class="chip ${scenario === k ? 'active' : ''}" data-action="detail-scenario" data-card="${card.id}" data-value="${k}">${label}</button>`
       ).join("")}</div>
@@ -222,7 +238,7 @@
     if (!notes.length) return "";
     return `<div class="mynotes">${notes.map(n => `
       <div class="mynote-item">
-        <span class="mynote-tag">✏️ 我的解读 · ${n.orientation === 'upright' ? '正位' : '逆位'}${n.scenario ? ' · ' + SCENARIO_LABELS[n.scenario] : ''}</span>
+        <span class="mynote-tag">我的解读 · ${n.orientation === 'upright' ? '正位' : '逆位'}${n.scenario ? ' · ' + SCENARIO_LABELS[n.scenario] : ''}</span>
         <p>${nl2br(n.text)}</p>
         <button class="link-btn" data-action="delete-note" data-id="${n.id}">删除</button>
       </div>`).join("")}</div>`;
@@ -255,7 +271,7 @@
     if (flashState.index >= flashState.queue.length) {
       return `${headerHTML("记忆闪卡", { back: "learn" })}
       <div class="card-panel center-text">
-        <h3>🎉 本轮完成！</h3>
+        <h3>本轮完成</h3>
         <p>共练习了 ${flashState.total} 张卡片</p>
         <a class="btn btn-primary" href="#/learn">返回记忆学习</a>
       </div>`;
@@ -278,10 +294,10 @@
         </div>
         <p class="center-text muted">你的记忆情况：</p>
         <div class="rating-row">
-          <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">😵 完全不会</button>
-          <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">😐 有点印象</button>
-          <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">🙂 记得</button>
-          <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">😎 非常熟</button>
+          <button class="btn btn-rate r1" data-action="rate-flash" data-rating="1">完全不会</button>
+          <button class="btn btn-rate r2" data-action="rate-flash" data-rating="2">有点印象</button>
+          <button class="btn btn-rate r3" data-action="rate-flash" data-rating="3">记得</button>
+          <button class="btn btn-rate r4" data-action="rate-flash" data-rating="4">非常熟</button>
         </div>`}`;
   }
 
@@ -299,9 +315,9 @@
       </a>`).join("")}
     </div>`;
   }
-  function spreadPositionsMapHTML(spread) {
+  function spreadPositionsMapHTML(spread, activeId) {
     return `<div class="spread-map">
-      ${spread.positions.map(p => `<button class="spread-dot" style="left:${p.x}%;top:${p.y}%" data-action="show-position" data-idx="${p.id}">${p.id}</button>`).join("")}
+      ${spread.positions.map(p => `<button class="spread-dot ${p.id === activeId ? 'active' : ''}" style="left:${p.x}%;top:${p.y}%" data-action="show-position" data-idx="${p.id}">${p.id}</button>`).join("")}
     </div>`;
   }
   function viewSpreadDetail(id) {
@@ -312,7 +328,7 @@
     return `
     ${headerHTML(spread.name, { back: "spreads" })}
     <p class="muted">${esc(spread.desc || "")}</p>
-    ${spreadPositionsMapHTML(spread)}
+    ${spreadPositionsMapHTML(spread, activePos)}
     <div class="card-panel">
       <h4>位置 ${pos.id}：${esc(pos.label)}</h4>
       <p>${esc(pos.desc)}</p>
@@ -416,7 +432,7 @@
       <div class="card-panel center-text">
         <p>点击下方按钮抽出第 ${step + 1}/${total} 张：<b>${esc(spread.positions[step].label)}</b></p>
         <p class="muted">${esc(spread.positions[step].desc)}</p>
-        <button class="btn btn-primary" data-action="draw-card">🃏 抽牌</button>
+        <button class="btn btn-primary" data-action="draw-card">抽牌</button>
       </div>`;
     }
     // 逐张解读阶段
@@ -432,12 +448,12 @@
       <div class="center-text">${cardFaceHTML(card, d.orientation, "md")}</div>
       <h3 class="center-text">${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</h3>
       <div class="card-panel">
-        <label>✏️ 你的解读（先自己想想看）</label>
+        <label>你的解读（先自己想想看）</label>
         <textarea id="my-interp" rows="3" placeholder="结合这个位置的含义，说说你的理解...">${esc(practiceState.myInterp[pos.id] || "")}</textarea>
       </div>
       ${revealed ? `
       <div class="card-panel scenario-text">
-        <h4>💬 参考解读</h4>
+        <h4>参考解读</h4>
         <p>${esc(cardMeaningText(card, d.orientation))}</p>
         <p><b>${SCENARIO_LABELS[practiceState.scenario] || ''}场景：</b>${esc(practiceState.scenario !== 'other' ? getScenarioText(card, practiceState.scenario, d.orientation) : '')}</p>
         ${myNoteListHTML(myNotesFor(card.id, d.orientation, null))}
@@ -489,8 +505,8 @@
     ${j.drawn.map(d => {
       const card = getCardById(d.cardId);
       return `<div class="card-panel">
-        <div class="daily-row">${cardFaceHTML(card, d.orientation, "sm")}
-          <div class="daily-text"><b>${esc(d.positionLabel)}：${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</b>
+        <div class="flex-row">${cardFaceHTML(card, d.orientation, "sm")}
+          <div class="flex-text"><b>${esc(d.positionLabel)}：${esc(card.name)}（${d.orientation === 'upright' ? '正位' : '逆位'}）</b>
           <p>${esc(d.myInterp || "（未填写）")}</p></div>
         </div>
       </div>`;
@@ -513,11 +529,11 @@
     <div class="card-panel">
       <h4>数据管理</h4>
       <p class="muted">你的所有数据都只保存在这个浏览器里，换设备/清缓存前请记得导出备份。</p>
-      <button class="btn btn-outline full-width" data-action="export-data">⬇ 导出全部数据 (JSON)</button>
-      <label class="btn btn-outline full-width" style="text-align:center;display:block;cursor:pointer;">
-        ⬆ 导入数据 (JSON)<input type="file" id="import-file" accept="application/json" style="display:none"/>
+      <button class="btn btn-outline full-width" data-action="export-data">导出全部数据 (JSON)</button>
+      <label class="btn btn-outline full-width" style="text-align:center;display:block;">
+        导入数据 (JSON)<input type="file" id="import-file" accept="application/json" style="display:none"/>
       </label>
-      <button class="btn btn-danger full-width" data-action="reset-data">🗑 清空重置所有数据</button>
+      <button class="btn btn-danger full-width" data-action="reset-data">清空重置所有数据</button>
     </div>
     <div class="card-panel muted" style="font-size:12px">
       塔罗学习 App · 纯前端本地存储 · 数据不会上传到任何服务器
